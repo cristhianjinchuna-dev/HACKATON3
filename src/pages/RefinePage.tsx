@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import FloorPanel from '../components/FloorPanel'
 import { apiRaw, api } from '../lib/api'
 import { ApiError, errorMessage } from '../lib/errors'
 import { onLumonEvent } from '../lib/events'
@@ -460,6 +461,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
         </div>
 
         <aside className="lg:w-72 space-y-3">
+          <FloorPanel fileId={file.id} />
           <div aria-live="polite" className="border rounded p-3 text-sm min-h-24">
             {selecting && <p>Buscando el grupo completo…</p>}
             {!selecting && group && (
