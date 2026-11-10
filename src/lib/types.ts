@@ -82,3 +82,18 @@ export interface RefineResult {
   size: number
   file: { progress: Progress; refinedGroups: number; totalGroups: number; mistakes: number; status: FileStatus }
 }
+
+// ---------- Expedientes ----------
+export interface Refiner {
+  id: number
+  fullName: string
+  department: { id: number; code: string; name: string }
+  title: string
+  extension: string
+  bio: string
+  profileUrl: string | null
+  badge: { url: string; width: number; height: number } | null
+  version: number
+  updatedAt: string
+}
+export interface RefinerPage { content: Refiner[]; totalElements: number; totalPages: number; page: number; size: number }

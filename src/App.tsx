@@ -9,6 +9,8 @@ import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
 import RefinePage from './pages/RefinePage'
+import RefinerPage from './pages/RefinerPage'
+import RefinersPage from './pages/RefinersPage'
 import RegisterPage from './pages/RegisterPage'
 
 export default function App() {
@@ -28,6 +30,10 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
                 <Route path="estado" element={<EstadoPage />} />
+                <Route element={<RequirePermission perm="refiners:read" />}>
+                  <Route path="refiners" element={<RefinersPage />} />
+                  <Route path="refiners/:id" element={<RefinerPage />} />
+                </Route>
                 <Route element={<RequirePermission perm="files:read" />}>
                   <Route path="files" element={<FilesPage />} />
                   <Route path="files/:id/refine" element={<RefinePage />} />
