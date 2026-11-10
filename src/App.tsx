@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import EstadoPage from './pages/EstadoPage'
 import FilesPage from './pages/FilesPage'
 import HomePage from './pages/HomePage'
+import IncidentsPage from './pages/IncidentsPage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
 import RefinePage from './pages/RefinePage'
@@ -30,6 +31,9 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route index element={<HomePage />} />
                 <Route path="estado" element={<EstadoPage />} />
+                <Route element={<RequirePermission perm="incidents:read" />}>
+                  <Route path="incidents" element={<IncidentsPage />} />
+                </Route>
                 <Route element={<RequirePermission perm="refiners:read" />}>
                   <Route path="refiners" element={<RefinersPage />} />
                   <Route path="refiners/:id" element={<RefinerPage />} />

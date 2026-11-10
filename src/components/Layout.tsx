@@ -32,6 +32,7 @@ export default function Layout() {
           {/* Se muestra según permissions, no según rol */}
           {can('files:read') && <NavLink to="/files" className={linkClass}>Archivos</NavLink>}
           {can('refiners:read') && <NavLink to="/refiners" className={linkClass}>Personal</NavLink>}
+          {can('incidents:read') && <NavLink to="/incidents" className={linkClass}>Incidencias</NavLink>}
           <NavLink to="/estado" className={linkClass}>Estado</NavLink>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
