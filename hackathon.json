@@ -2,7 +2,7 @@
   "teamCode": "TEAM-026",
   "teamName": "Viborex",
   "deployUrl": "https://hackaton3-eosin.vercel.app",
-  "storageProvider": "CLOUDINARY",
+  "storageProvider": "SUPABASE",
   "integrantes": [
     { "nombre": "Cristhian Gabriel Jinchuña Cama", "codigo": "202520002" },
     { "nombre": "Mathius Quispe Sicha", "codigo": "202520058" },

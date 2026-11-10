@@ -33,9 +33,11 @@ npm run build          # verificación de tipos + build de producción
 
 ### Storage
 
-- **Cloudinary**, upload preset **unsigned** con formato `webp` y carpeta `lumon/TEAM-026`, registrado con
-  `PUT /integrations/storage` (`provider`, `cloudName`, `uploadPreset`). Solo se usan valores públicos: ninguna
-  API Key ni API Secret está en el repositorio ni en el bundle.
+- **Supabase Storage**, bucket público `lumon-media` (solo `image/webp`, hasta 300 KB) con una política RLS
+  que permite al rol `anon` **solo insertar** dentro de `TEAM-026/…` (sin `UPDATE` ni `DELETE`). Registrado con
+  `PUT /integrations/storage` (`provider`, `projectUrl`, `bucket`, `publicKey`) y verificado (S0–S7).
+- Solo se usa la clave **publicable** (`sb_publishable_…`). Ninguna clave secreta ni `service_role` está en el
+  repositorio ni en el bundle.
 
 ---
 
