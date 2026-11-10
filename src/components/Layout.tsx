@@ -1,11 +1,13 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import ErrorBoundary from './ErrorBoundary'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1 rounded ${isActive ? 'bg-teal-700 text-white' : 'hover:bg-teal-100'}`
 
 export default function Layout() {
   const { me, can, logout } = useAuth()
+  const { pathname } = useLocation()
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -25,7 +27,10 @@ export default function Layout() {
         </div>
       </header>
       <main className="flex-1 p-4">
-        <Outlet />
+        {/* key: al cambiar de ruta se limpia el error */}
+        <ErrorBoundary key={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )
