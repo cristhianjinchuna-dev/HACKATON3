@@ -8,6 +8,7 @@ import FilesPage from './pages/FilesPage'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import NotFoundPage from './pages/NotFoundPage'
+import RefinePage from './pages/RefinePage'
 import RegisterPage from './pages/RegisterPage'
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
                 <Route path="estado" element={<EstadoPage />} />
                 <Route element={<RequirePermission perm="files:read" />}>
                   <Route path="files" element={<FilesPage />} />
+                  <Route path="files/:id/refine" element={<RefinePage />} />
                 </Route>
               </Route>
             </Route>
