@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { onStreamStatus, startEvents, stopEvents, type StreamStatus } from '../lib/events'
+import ContingencyModal from './ContingencyModal'
 import ErrorBoundary from './ErrorBoundary'
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -8,6 +11,17 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export default function Layout() {
   const { me, can, logout } = useAuth()
   const { pathname } = useLocation()
+  const [stream, setStream] = useState<StreamStatus>('desconectado')
+
+  // Con sesión: conectar al stream de eventos (una conexión por navegador)
+  useEffect(() => {
+    startEvents()
+    const off = onStreamStatus(setStream)
+    return () => {
+      off()
+      stopEvents()
+    }
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -20,6 +34,10 @@ export default function Layout() {
           <NavLink to="/estado" className={linkClass}>Estado</NavLink>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
+          <span role="status" aria-live="polite" className="flex items-center gap-1">
+            <span aria-hidden="true" className={`inline-block w-2 h-2 rounded-full ${stream === 'conectado' || stream === 'en otra pestaña' ? 'bg-green-600' : 'bg-amber-500'}`} />
+            Eventos: {stream}
+          </span>
           <span>{me?.displayName} · {me?.team.code}</span>
           <button type="button" onClick={() => void logout()} className="px-3 py-1 rounded border">
             Cerrar sesión
@@ -32,6 +50,7 @@ export default function Layout() {
           <Outlet />
         </ErrorBoundary>
       </main>
+      <ContingencyModal />
     </div>
   )
 }

@@ -3,8 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { apiRaw, api } from '../lib/api'
 import { ApiError, errorMessage } from '../lib/errors'
+import { onLumonEvent } from '../lib/events'
 import { sleep } from '../lib/sleep'
-import { BINS, type Bin, type FileItem, type RefineResult, type Rules } from '../lib/types'
+import { BINS, type Bin, type FileItem, type Progress, type RefineResult, type Rules } from '../lib/types'
 import { findGroup, type Cell, type Group } from '../mdr/group'
 import { TileStore, tileKey } from '../mdr/tileStore'
 
@@ -89,6 +90,26 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
       store.dispose()
     }
   }, [store])
+
+  // Tiempo real: refinamientos de otros, archivo completado y stream.reset (sin recargar)
+  useEffect(
+    () =>
+      onLumonEvent((e) => {
+        if (e.type === 'refinement.created') {
+          const d = e.data as { fileId: number; cells: Cell[]; bin: Bin; progress: Progress }
+          if (d.fileId !== initialFile.id) return
+          store.applyBin(d.cells, LETTER[d.bin])
+          setFile((f) => ({ ...f, progress: d.progress }))
+          setGroup((g) => (g && d.cells.some((x) => g.ids.has(x.r * initialFile.cols + x.c)) ? null : g))
+        } else if (e.type === 'file.completed') {
+          const d = e.data as { fileId: number }
+          if (d.fileId === initialFile.id) setFile((f) => ({ ...f, status: 'COMPLETE' }))
+        } else if (e.type === 'stream.reset') {
+          api<FileItem>(`/files/${initialFile.id}`).then(setFile).catch(() => {})
+        }
+      }),
+    [store, initialFile.id, initialFile.cols],
+  )
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState({ top: 0, left: 0, width: 800, height: 500 })

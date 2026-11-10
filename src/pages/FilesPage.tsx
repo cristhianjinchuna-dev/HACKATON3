@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { errorMessage } from '../lib/errors'
+import { onLumonEvent } from '../lib/events'
 import type { FilePage } from '../lib/types'
 
 const SIZES = [10, 25, 50]
@@ -31,6 +32,18 @@ export default function FilesPage() {
   const [data, setData] = useState<FilePage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [reload, setReload] = useState(0)
+
+  // Tiempo real: el progreso cambia sin recargar
+  useEffect(
+    () =>
+      onLumonEvent((e) => {
+        if (e.type === 'refinement.created' || e.type === 'file.completed' || e.type === 'stream.reset') {
+          setReload((n) => n + 1)
+        }
+      }),
+    [],
+  )
 
   // Si la URL cambia (atrás/adelante), el input refleja la URL
   useEffect(() => {
@@ -79,7 +92,7 @@ export default function FilesPage() {
         if (!ctrl.signal.aborted) setLoading(false)
       })
     return () => ctrl.abort()
-  }, [page, size, status, q, sort])
+  }, [page, size, status, q, sort, reload])
 
   return (
     <section>
