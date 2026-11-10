@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import CursorLayer from '../components/CursorLayer'
 import FloorPanel from '../components/FloorPanel'
 import { apiRaw, api } from '../lib/api'
 import { ApiError, errorMessage } from '../lib/errors'
@@ -8,6 +9,7 @@ import { onLumonEvent } from '../lib/events'
 import { sleep } from '../lib/sleep'
 import { BINS, type Bin, type FileItem, type Progress, type RefineResult, type Rules } from '../lib/types'
 import { findGroup, type Cell, type Group } from '../mdr/group'
+import { ClaimDenied, FloorClient } from '../mdr/floor'
 import { TileStore, tileKey } from '../mdr/tileStore'
 
 const CELL = 28      // px por celda
@@ -77,8 +79,9 @@ export default function RefinePage() {
 // Grilla virtualizada + selección de grupo + cajas
 // ---------------------------------------------------------------------------
 function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) {
-  const { can } = useAuth()
+  const { can, me } = useAuth()
   const canRefine = can('files:refine')
+  const myUserId = me?.id ?? 0
   const [file, setFile] = useState(initialFile)
   const [sp, setSp] = useSearchParams()
 
@@ -112,6 +115,19 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
     [store, initialFile.id, initialFile.cols],
   )
 
+  // Piso compartido (WebSocket): una conexión por pestaña mientras la grilla está abierta
+  const [floor, setFloor] = useState<FloorClient | null>(null)
+  const [, setFloorTick] = useState(0)
+  useEffect(() => {
+    const f = new FloorClient(initialFile.id, myUserId)
+    setFloor(f)
+    const off = f.onState(() => setFloorTick((t) => t + 1))   // reservas (no cursores)
+    return () => {
+      off()
+      f.close()   // se libera la reserva y se cierra al salir
+    }
+  }, [initialFile.id, myUserId])
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState({ top: 0, left: 0, width: 800, height: 500 })
   const [focus, setFocus] = useState<Cell>({ r: 0, c: 0 })
@@ -119,6 +135,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
   const urlTimer = useRef(0)
 
   const [group, setGroup] = useState<Group | null>(null)
+  const [blockedBy, setBlockedBy] = useState<string | null>(null)   // grupo reservado por otro
   const [selecting, setSelecting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -198,6 +215,11 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
     store.cancelExcept(keep)
   }, [store, tr0, tr1, tc0, tc1])
 
+  // Mi cursor para los demás (máx. 10/s, no se envía con la pestaña oculta)
+  useEffect(() => {
+    floor?.sendCursor(focus.r, focus.c)
+  }, [floor, focus])
+
   // Mantener el foco del DOM en la celda activa (roving tabindex)
   useEffect(() => {
     if (!focusInGrid.current) return
@@ -242,18 +264,37 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
       try {
         const g = await findGroup(store, file, rules, cell)
         setGroup(g)
+        setBlockedBy(null)
+        // Antes de llevarlo a una caja, se reserva en el piso compartido
+        if (!g.noise && floor?.connected) {
+          try {
+            await floor.claim(cell.r, cell.c)
+          } catch (e) {
+            if (e instanceof ClaimDenied && e.message === 'HELD') {
+              setBlockedBy(e.holder ?? 'otro usuario')
+              setMessage(`Ese grupo lo tiene reservado ${e.holder ?? 'otro usuario'}. Elige otro o espera a que lo libere.`)
+            } else if (e instanceof ClaimDenied) {
+              setMessage('El piso dice que esa celda ya no es un grupo válido. Vuelve a elegir.')
+            }
+            // sin conexión / sin respuesta: se puede seguir refinando con normalidad
+          }
+        }
       } catch (e) {
         setMessage(errorMessage(e))
       } finally {
         setSelecting(false)
       }
     },
-    [store, file, rules],
+    [store, file, rules, floor],
   )
 
   // ---------------- Refinar (idempotente) ----------------
   async function refine(bin: Bin) {
     if (!group || group.noise || pending.current || !canRefine) return   // doble clic / doble Enter: ignorado
+    if (blockedBy) {
+      setMessage(`No se puede: el grupo lo tiene reservado ${blockedBy}.`)
+      return
+    }
     const cells = group.cells
     const sig = `${bin}|${cells.map((x) => `${x.r},${x.c}`).sort().join(';')}`
     if (!intent.current || intent.current.sig !== sig) {
@@ -287,6 +328,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
       store.applyBin(cells, LETTER[bin])
       setFile((f) => ({ ...f, ...res.file }))
       setGroup(null)
+      floor?.release()
       intent.current = null
       const replayed = result.headers.get('Idempotent-Replayed') === 'true'
       setMessage(`Grupo de ${res.size} celdas refinado en ${BIN_NAME[bin]}.${replayed ? ' (respuesta repetida por reintento)' : ''}`)
@@ -371,7 +413,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
       case 'End': moveFocus(e.ctrlKey ? file.rows - 1 : r, file.cols - 1); break
       case 'Enter':
       case ' ': void selectAt(focus); break
-      case 'Escape': setGroup(null); break
+      case 'Escape': setGroup(null); setBlockedBy(null); floor?.release(); break
       case '1': case '2': case '3': case '4': void refine(BINS[Number(e.key) - 1]); break
       default: return
     }
@@ -395,6 +437,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
   if (focus.r < r0 || focus.r > r1) rowsToRender.push(focus.r)   // la celda con foco siempre en el DOM
 
   const thr = rules.tremorThreshold
+  const claimedByOthers = floor ? floor.othersClaimedCells(file.cols) : new Map<number, string>()
 
   return (
     <section>
@@ -418,6 +461,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
           style={{ height: 'min(70vh, 640px)', maxWidth: 1200 }}
         >
           <div style={{ position: 'relative', width: file.cols * CELL, height: file.rows * CELL }}>
+            {floor && <CursorLayer floor={floor} cell={CELL} r0={r0} r1={r1} c0={c0} c1={c1} />}
             {rowsToRender.map((r) => {
               const cols: number[] = []
               if (r >= r0 && r <= r1) for (let c = c0; c <= c1; c++) cols.push(c)
@@ -433,6 +477,8 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
                     else if (info.bin !== '.') cls += ` bin-${info.bin}`
                     else if (info.tremor >= thr) cls += ` cell-scary ${info.tremor >= 90 ? 'shake-3' : info.tremor >= 75 ? 'shake-2' : 'shake-1'}`
                     if (selected) cls += ' cell-selected'
+                    const holder = claimedByOthers.get(r * file.cols + c)
+                    if (holder) cls += ' cell-claimed'
                     return (
                       <div
                         key={c}
@@ -442,6 +488,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
                         data-cell={`${r}:${c}`}
                         tabIndex={isFocus ? 0 : -1}
                         className={cls}
+                        title={holder ? `Reservado por ${holder}` : undefined}
                         style={{ left: c * CELL, width: CELL, height: CELL, touchAction: selected ? 'none' : undefined }}
                         onClick={() => {
                           focusInGrid.current = true
@@ -461,7 +508,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
         </div>
 
         <aside className="lg:w-72 space-y-3">
-          <FloorPanel fileId={file.id} />
+          {floor && <FloorPanel floor={floor} myUserId={myUserId} onGoTo={moveFocus} />}
           <div aria-live="polite" className="border rounded p-3 text-sm min-h-24">
             {selecting && <p>Buscando el grupo completo…</p>}
             {!selecting && group && (
@@ -469,7 +516,9 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
                 <p className="font-semibold">Grupo seleccionado: {group.tooBig ? `más de ${rules.maxGroupSize}` : group.cells.length} celdas</p>
                 {group.noise
                   ? <p>Es <strong>ruido</strong>: no se puede refinar.</p>
-                  : <p>Caja según las reglas: <strong>{group.bin}</strong>. Arrástralo a una caja o pulsa 1-4.</p>}
+                  : blockedBy
+                    ? <p>Reservado por <strong>{blockedBy}</strong>: no se puede llevar a una caja.</p>
+                    : <p>Caja según las reglas: <strong>{group.bin}</strong>. Arrástralo a una caja o pulsa 1-4.</p>}
               </>
             )}
             {!selecting && !group && <p>Elige una celda que da miedo (clic o Enter) para seleccionar su grupo.</p>}
@@ -485,7 +534,7 @@ function Board({ initialFile, rules }: { initialFile: FileItem; rules: Rules }) 
                   type="button"
                   data-bin={b}
                   onClick={() => void refine(b)}
-                  disabled={!group || group.noise || busy || !canRefine}
+                  disabled={!group || group.noise || busy || !canRefine || !!blockedBy}
                   aria-label={`Enviar el grupo a ${b} (tecla ${i + 1}). Progreso ${Math.round(file.progress[b] * 100)}%`}
                   className={`w-full text-left border-2 rounded p-2 bin-box bin-${LETTER[b]} ${group?.bin === b ? 'ring-2 ring-black' : ''} disabled:opacity-60`}
                 >

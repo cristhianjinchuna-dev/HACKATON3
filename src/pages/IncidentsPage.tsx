@@ -110,7 +110,7 @@ export default function IncidentsPage() {
   function addFiles(files: FileList | null) {
     if (!files) return
     const room = 3 - photos.length
-    const added = [...files].slice(0, room).map((file) => ({ key: crypto.randomUUID(), name: file.name, status: 'procesando' as const, progress: 0, file }))
+    const added = Array.from(files).slice(0, room).map((file) => ({ key: crypto.randomUUID(), name: file.name, status: 'procesando' as const, progress: 0, file }))
     setPhotos((p) => [...p, ...added])
     added.forEach((p) => void upload(p))
   }
@@ -187,7 +187,7 @@ export default function IncidentsPage() {
             <p className="whitespace-pre-wrap text-sm">{i.description}</p>
             <p className="text-xs">Por {i.createdBy.displayName}</p>
             <div className="flex gap-2 mt-2">
-              {i.photos.map((ph) => <img key={ph.mediaId} src={ph.url} alt={`Foto del reporte ${i.title}`} width={120} height={Math.round((120 * ph.height) / ph.width)} loading="lazy" />)}
+              {i.photos.map((ph) => <img key={ph.mediaId} src={ph.url} alt={`Foto del reporte ${i.title}`} width={120} height={Math.round((120 * ph.height) / ph.width)} />)}
             </div>
           </li>
         ))}

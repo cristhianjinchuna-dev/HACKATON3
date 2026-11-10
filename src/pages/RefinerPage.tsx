@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import BadgeEditor from '../components/BadgeEditor'
 import { apiRaw } from '../lib/api'
 import { ApiError, errorMessage, fieldErrors } from '../lib/errors'
 import { onLumonEvent } from '../lib/events'
@@ -24,6 +25,7 @@ export default function RefinerPage() {
   const [saving, setSaving] = useState(false)
   const [conflict, setConflict] = useState<{ current: Refiner; etag: string | null } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [badgeOpen, setBadgeOpen] = useState(false)
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -123,7 +125,25 @@ export default function RefinerPage() {
       )}
 
       {can('refiners:write') && !editing && (
-        <button type="button" onClick={() => startEdit(refiner)} className="mt-4 px-3 py-1 border rounded">Editar</button>
+        <div className="flex gap-2 mt-4">
+          <button type="button" onClick={() => startEdit(refiner)} className="px-3 py-1 border rounded">Editar</button>
+          {can('media:upload') && !badgeOpen && (
+            <button type="button" onClick={() => setBadgeOpen(true)} className="px-3 py-1 border rounded">Cambiar fotocheck</button>
+          )}
+        </div>
+      )}
+      {badgeOpen && (
+        <BadgeEditor
+          refinerId={refiner.id}
+          etag={etag}
+          onCancel={() => setBadgeOpen(false)}
+          onSaved={(r, newEtag) => {
+            setRefiner(r)
+            setEtag(newEtag)
+            setBadgeOpen(false)
+            setNotice('Fotocheck actualizado.')
+          }}
+        />
       )}
       {editing && (
         <form onSubmit={(e) => void save(e)} className="mt-4 space-y-3">
